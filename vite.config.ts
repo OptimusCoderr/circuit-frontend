@@ -5,7 +5,7 @@ import { componentTagger } from "lovable-tagger";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
-  base:"/circuit-frontend",
+  base:"/circuit-frontend/",
   plugins: [
     react(),
     mode === 'development' && componentTagger(),
