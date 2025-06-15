@@ -45,23 +45,30 @@ const Login = () => {
     }
 
     try {
+      console.log('Attempting login with:', { email, password: '***' });
+      
       const result = await login(email, password);
       
-      // Check if login was actually successful
-      if (result && result.success !== false) {
-        toast({
-          title: 'Login Successful',
-          description: 'Welcome back!',
-        });
-        
-        // Use replace instead of navigate to prevent back navigation issues
+      console.log('Login result:', result);
+      
+      // If we get here without throwing, login was successful
+      toast({
+        title: 'Login Successful',
+        description: 'Welcome back!',
+      });
+      
+      // Small delay to ensure state is updated
+      setTimeout(() => {
         navigate('/dashboard', { replace: true });
-      } else {
-        // Handle case where login doesn't throw but isn't successful
-        throw new Error(result?.message || 'Login failed');
-      }
+      }, 100);
+      
     } catch (error) {
-      console.error('Login error:', error);
+      console.error('Login error details:', {
+        error,
+        message: error?.message,
+        response: error?.response,
+        stack: error?.stack
+      });
       
       // Use the actual error from store if available
       const errorMessage = error?.message || error?.response?.data?.message || 'Invalid credentials or server error.';
