@@ -29,14 +29,29 @@ interface AuthActions {
 
 type AuthStore = AuthState & AuthActions;
 
-export const useAuthStore = create<AuthStore>((set, get) => ({
-  user: null,
-  token: localStorage.getItem('token') || null,
-  isAuthenticated: false,
-  error: null,
-  isLoading: false,
-  isCheckingAuth: true,
-  message: null,
+// Initialize state from localStorage
+const getInitialState = () => {
+  const token = localStorage.getItem('token');
+  const user = localStorage.getItem('user');
+  
+  return {
+    token,
+    user: user ? JSON.parse(user) : null,
+    isAuthenticated: !!token, // Set authenticated if token exists
+  };
+};
+
+export const useAuthStore = create<AuthStore>((set, get) => {
+  const initialState = getInitialState();
+  
+  return {
+    user: initialState.user,
+    token: initialState.token,
+    isAuthenticated: initialState.isAuthenticated,
+    error: null,
+    isLoading: false,
+    isCheckingAuth: true,
+    message: null,
 
   setToken: (token: string | null) => {
     if (token) {
@@ -44,6 +59,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
     } else {
       localStorage.removeItem('token');
+      localStorage.removeItem('user');
       delete axios.defaults.headers.common['Authorization'];
     }
     set({ token });
@@ -60,6 +76,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       
       // Set token and update state
       get().setToken(token);
+      localStorage.setItem('user', JSON.stringify(user));
       set({ 
         user, 
         isAuthenticated: true, 
@@ -88,6 +105,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       
       // Set token and update state
       get().setToken(token);
+      localStorage.setItem('user', JSON.stringify(user));
       set({
         isAuthenticated: true,
         user,
@@ -168,6 +186,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       
       // Update token and user
       get().setToken(token);
+      localStorage.setItem('user', JSON.stringify(user));
       set({ 
         user,
         isAuthenticated: true,
@@ -185,7 +204,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       throw error;
     }
   },
-}));
+}});
 
 // Initialize axios with token on app start
 const initializeAxios = () => {
