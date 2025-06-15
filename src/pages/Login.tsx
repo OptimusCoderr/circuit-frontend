@@ -1,4 +1,3 @@
-
 import { useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -16,7 +15,6 @@ const Login = () => {
 
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
-  // const [role, setRole] = useState<"planner" | "vendor" | "buyer">("planner"); // Remove if not used
 
   const { login, isLoading, error } = useAuthStore();
 
@@ -46,25 +44,35 @@ const Login = () => {
       return;
     }
 
-   try {
-  await login(email, password);
-  toast({
-    title: 'Login Successful',
-    description: 'Welcome back!',
-  });
-  navigate('/dashboard');
-  // Remove the forced reload - fix state management instead
-} catch (error) {
-  console.error('Login error:', error);
-  // Use the actual error from store if available
-  const errorMessage = error?.message || 'Invalid credentials or server error.';
-  toast({
-    title: 'Login Failed',
-    description: errorMessage,
-    variant: 'destructive',
-  });
-  shakeButton(loginButtonRef);
-}
+    try {
+      const result = await login(email, password);
+      
+      // Check if login was actually successful
+      if (result && result.success !== false) {
+        toast({
+          title: 'Login Successful',
+          description: 'Welcome back!',
+        });
+        
+        // Use replace instead of navigate to prevent back navigation issues
+        navigate('/dashboard', { replace: true });
+      } else {
+        // Handle case where login doesn't throw but isn't successful
+        throw new Error(result?.message || 'Login failed');
+      }
+    } catch (error) {
+      console.error('Login error:', error);
+      
+      // Use the actual error from store if available
+      const errorMessage = error?.message || error?.response?.data?.message || 'Invalid credentials or server error.';
+      
+      toast({
+        title: 'Login Failed',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+      shakeButton(loginButtonRef);
+    }
   };
 
   const shakeButton = (buttonRef: React.RefObject<HTMLButtonElement>) => {
@@ -157,6 +165,5 @@ const Login = () => {
     </div>
   );
 };
-
 
 export default Login;
