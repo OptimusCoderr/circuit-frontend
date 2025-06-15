@@ -60,6 +60,7 @@ export const useAuthStore = create<AuthStore>((set,get) => ({
     set({ isLoading: true, error: null });
     try {
       const response = await axios.post(`/auth/login`, { email, password });
+	console.log("SignIn response:", response.data);
       set({
         isAuthenticated: true,
         user: response.data.user,
