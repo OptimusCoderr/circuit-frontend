@@ -47,37 +47,34 @@ const Login = () => {
     try {
       console.log('Attempting login with:', { email, password: '***' });
       
-      const result = await login(email, password);
-      
-      console.log('Login result:', result);
+      await login(email, password);
       
       // If we get here without throwing, login was successful
+      console.log('Login successful, current auth state:', {
+        isAuthenticated: useAuthStore.getState().isAuthenticated,
+        user: useAuthStore.getState().user,
+        token: !!useAuthStore.getState().token
+      });
+      
       toast({
         title: 'Login Successful',
         description: 'Welcome back!',
       });
       
-      // Small delay to ensure state is updated
-      setTimeout(() => {
-        navigate('/dashboard', { replace: true });
-      }, 100);
+      // Navigate immediately since login was successful
+      navigate('/dashboard', { replace: true });
       
     } catch (error) {
       console.error('Login error details:', {
         error,
         message: error?.message,
-        response: error?.response,
+        response: error?.response?.data,
+        status: error?.response?.status,
         stack: error?.stack
       });
       
-      // Use the actual error from store if available
-      const errorMessage = error?.message || error?.response?.data?.message || 'Invalid credentials or server error.';
-      
-      toast({
-        title: 'Login Failed',
-        description: errorMessage,
-        variant: 'destructive',
-      });
+      // The auth store already shows a toast, so we don't need to show another one
+      // Just shake the button to indicate the error
       shakeButton(loginButtonRef);
     }
   };
