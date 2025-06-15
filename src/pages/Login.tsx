@@ -46,26 +46,25 @@ const Login = () => {
       return;
     }
 
-    try {
-      await login(email, password);
-      toast({
-        title: 'Login Successful',
-        description: `Welcome back!`,
-      });
-      navigate('/dashboard'); // Redirect after successful login
-          // Then force a full page reload after a short delay
-      setTimeout(() => {
-        window.location.reload();
-      }, 10); // Small delay to ensure navigation happens before reload
-    } catch (error) {
-      console.error('Login error:', error);
-      toast({
-        title: 'Login Failed',
-        description: 'Invalid credentials or server error.',
-        variant: 'destructive',
-      });
-      shakeButton(loginButtonRef);
-    }
+   try {
+  await login(email, password);
+  toast({
+    title: 'Login Successful',
+    description: 'Welcome back!',
+  });
+  navigate('/dashboard');
+  // Remove the forced reload - fix state management instead
+} catch (error) {
+  console.error('Login error:', error);
+  // Use the actual error from store if available
+  const errorMessage = error?.message || 'Invalid credentials or server error.';
+  toast({
+    title: 'Login Failed',
+    description: errorMessage,
+    variant: 'destructive',
+  });
+  shakeButton(loginButtonRef);
+}
   };
 
   const shakeButton = (buttonRef: React.RefObject<HTMLButtonElement>) => {
