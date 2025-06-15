@@ -25,20 +25,38 @@ interface AuthActions {
   checkAuth: () => Promise<void>;
   refreshToken: () => Promise<void>;
   setToken: (token: string | null) => void;
+  setUser: (user: User | null) => void;
 }
 
 type AuthStore = AuthState & AuthActions;
 
 // Initialize state from localStorage
 const getInitialState = () => {
-  const token = localStorage.getItem('token');
-  const user = localStorage.getItem('user');
-  
-  return {
-    token,
-    user: user ? JSON.parse(user) : null,
-    isAuthenticated: !!token, // Set authenticated if token exists
-  };
+  try {
+    const token = localStorage.getItem('token');
+    const userString = localStorage.getItem('user');
+    
+    let user = null;
+    if (userString && userString !== 'undefined') {
+      user = JSON.parse(userString);
+    }
+    
+    return {
+      token,
+      user,
+      isAuthenticated: !!token, // Set authenticated if token exists
+    };
+  } catch (error) {
+    console.error('Error parsing stored auth data:', error);
+    // Clear corrupted data
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    return {
+      token: null,
+      user: null,
+      isAuthenticated: false,
+    };
+  }
 };
 
 export const useAuthStore = create<AuthStore>((set, get) => {
@@ -65,6 +83,15 @@ export const useAuthStore = create<AuthStore>((set, get) => {
     set({ token });
   },
 
+  setUser: (user: User | null) => {
+    if (user) {
+      localStorage.setItem('user', JSON.stringify(user));
+    } else {
+      localStorage.removeItem('user');
+    }
+    set({ user });
+  },
+
   signup: async (email: string, password: string, name: string) => {
     set({ isLoading: true, error: null });
     try {
@@ -76,9 +103,8 @@ export const useAuthStore = create<AuthStore>((set, get) => {
       
       // Set token and update state
       get().setToken(token);
-      localStorage.setItem('user', JSON.stringify(user));
+      get().setUser(user);
       set({ 
-        user, 
         isAuthenticated: true, 
         isLoading: false 
       });
@@ -105,10 +131,9 @@ export const useAuthStore = create<AuthStore>((set, get) => {
       
       // Set token and update state
       get().setToken(token);
-      localStorage.setItem('user', JSON.stringify(user));
+      get().setUser(user);
       set({
         isAuthenticated: true,
-        user,
         error: null,
         isLoading: false,
       });
@@ -186,9 +211,8 @@ export const useAuthStore = create<AuthStore>((set, get) => {
       
       // Update token and user
       get().setToken(token);
-      localStorage.setItem('user', JSON.stringify(user));
+      get().setUser(user);
       set({ 
-        user,
         isAuthenticated: true,
         isCheckingAuth: false 
       });
