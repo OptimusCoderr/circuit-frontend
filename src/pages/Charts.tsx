@@ -28,7 +28,9 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
-  ResponsiveContainer
+  ResponsiveContainer,
+  LineChart,
+  Line
 } from 'recharts';
 
 // Import Zustand store
@@ -71,8 +73,14 @@ const Charts = () => {
   const processedData = useMemo(() => {
     if (!flattenedReadings.length) return null;
 
-    // Hourly Data (power grouped by hour)
-    const hourlyData = flattenedReadings
+    // Calculate instantaneous power (P = V * I) for each reading
+    const readingsWithInstantaneousPower = flattenedReadings.map(reading => ({
+      ...reading,
+      instantaneousPower: reading.voltage * reading.current
+    }));
+
+    // Hourly Data with instantaneous and average power
+    const hourlyData = readingsWithInstantaneousPower
       .filter((reading) => {
         const readingDate = new Date(reading.timestamp).toISOString().split('T')[0];
         return readingDate === selectedDate;
@@ -88,27 +96,36 @@ const Charts = () => {
 
         if (existing) {
           existing.count++;
+          existing.totalInstantaneousPower += reading.instantaneousPower;
+          existing.totalPower += Math.abs(reading.power || 0);
           existing.solar =
             ((existing.solar * (existing.count - 1)) +
               (reading.power > 0 ? reading.power : 0)) /
             existing.count;
           existing.load =
-            ((existing.load * (existing.count - 1)) + Math.abs(reading.power)) /
+            ((existing.load * (existing.count - 1)) + Math.abs(reading.power || 0)) /
             existing.count;
         } else {
           acc.push({
             time,
             solar: reading.power > 0 ? reading.power : 0,
-            load: Math.abs(reading.power),
+            load: Math.abs(reading.power || 0),
+            totalInstantaneousPower: reading.instantaneousPower,
+            totalPower: Math.abs(reading.power || 0),
             count: 1
           });
         }
 
         return acc;
-      }, []);
+      }, [])
+      .map(item => ({
+        ...item,
+        avgInstantaneousPower: Number((item.totalInstantaneousPower / item.count).toFixed(2)),
+        avgPowerPerHour: Number((item.totalPower / item.count).toFixed(2))
+      }));
 
-    // Minute Data (voltage and current by minute)
-    const minuteData = flattenedReadings
+    // Minute Data (voltage, current, and instantaneous power by minute)
+    const minuteData = readingsWithInstantaneousPower
       .filter((reading) => {
         const readingDate = new Date(reading.timestamp).toISOString().split('T')[0];
         return readingDate === selectedDate;
@@ -132,19 +149,15 @@ const Charts = () => {
           existing.current =
             ((existing.current * (existing.count - 1)) + reading.current) /
             existing.count;
-          existing.acVoltage =
-            ((existing.acVoltage * (existing.count - 1)) + reading.ACvoltage) /
-            existing.count;
-          existing.acCurrent =
-            ((existing.acCurrent * (existing.count - 1)) + reading.ACcurrent) /
+          existing.instantaneousPower =
+            ((existing.instantaneousPower * (existing.count - 1)) + reading.instantaneousPower) /
             existing.count;
         } else {
           acc.push({
             time,
             voltage: reading.voltage,
             current: reading.current,
-            acVoltage: reading.ACvoltage,
-            acCurrent: reading.ACcurrent,
+            instantaneousPower: reading.instantaneousPower,
             count: 1
           });
         }
@@ -153,7 +166,7 @@ const Charts = () => {
       }, []);
 
     // Daily Data (averaged over multiple days)
-    const dailyData = flattenedReadings
+    const dailyData = readingsWithInstantaneousPower
       .reduce((acc, reading) => {
         const date = new Date(reading.timestamp);
         const day = date.toISOString().split('T')[0];
@@ -166,7 +179,7 @@ const Charts = () => {
               (reading.power > 0 ? reading.power : 0)) /
             existing.count;
           existing.load =
-            ((existing.load * (existing.count - 1)) + Math.abs(reading.power)) /
+            ((existing.load * (existing.count - 1)) + Math.abs(reading.power || 0)) /
             existing.count;
           existing.voltage =
             ((existing.voltage * (existing.count - 1)) + reading.voltage) /
@@ -174,22 +187,18 @@ const Charts = () => {
           existing.current =
             ((existing.current * (existing.count - 1)) + reading.current) /
             existing.count;
-          existing.acVoltage =
-            ((existing.acVoltage * (existing.count - 1)) + reading.ACvoltage) /
-            existing.count;
-          existing.acCurrent =
-            ((existing.acCurrent * (existing.count - 1)) + reading.ACcurrent) /
+          existing.instantaneousPower =
+            ((existing.instantaneousPower * (existing.count - 1)) + reading.instantaneousPower) /
             existing.count;
         } else {
           acc.push({
             day,
             dayLabel: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
             solar: reading.power > 0 ? reading.power : 0,
-            load: Math.abs(reading.power),
+            load: Math.abs(reading.power || 0),
             voltage: reading.voltage,
             current: reading.current,
-            acVoltage: reading.ACvoltage,
-            acCurrent: reading.ACcurrent,
+            instantaneousPower: reading.instantaneousPower,
             count: 1
           });
         }
@@ -209,20 +218,27 @@ const Charts = () => {
       : [];
 
     // Circuit Data - modified for bar chart
-    const circuitData = flattenedReadings
+    const circuitData = readingsWithInstantaneousPower
       .reduce((acc, reading) => {
         const name =
           typeof reading.circuit === 'object'
             ? reading.circuit?.name
             : `Circuit ${reading.circuit || 'Unknown'}`;
         const power = reading.power || 0;
+        const instantaneousPower = reading.instantaneousPower;
         const existing = acc.find((item) => item.name === name);
 
         if (existing) {
           existing.total += power;
+          existing.totalInstantaneous += instantaneousPower;
           existing.count += 1;
         } else {
-          acc.push({ name, total: power, count: 1 });
+          acc.push({ 
+            name, 
+            total: power, 
+            totalInstantaneous: instantaneousPower,
+            count: 1 
+          });
         }
 
         return acc;
@@ -230,22 +246,25 @@ const Charts = () => {
       .map((item, i) => ({
         name: item.name,
         value: Number((Math.abs(item.total / item.count)).toFixed(2)),
-        consumption: Number((Math.abs(item.total / item.count)).toFixed(2))
+        consumption: Number((Math.abs(item.total / item.count)).toFixed(2)),
+        avgInstantaneousPower: Number((item.totalInstantaneous / item.count).toFixed(2))
       }));
 
     // Performance Data
-    const performanceData = flattenedReadings
+    const performanceData = readingsWithInstantaneousPower
       .reduce((acc, reading) => {
         const date = new Date(reading.timestamp);
         const month = date.toLocaleString('default', { month: 'short' });
         const isActive = reading.status === 'active';
         const power = reading.power || 0;
+        const instantaneousPower = reading.instantaneousPower;
         const existing = acc.find((item) => item.month === month);
 
         if (existing) {
           existing.totalReadings += 1;
           existing.activeReadings += isActive ? 1 : 0;
           existing.totalPower += Math.abs(power);
+          existing.totalInstantaneousPower += instantaneousPower;
           existing.maxPower = Math.max(existing.maxPower, Math.abs(power));
         } else {
           acc.push({
@@ -253,6 +272,7 @@ const Charts = () => {
             totalReadings: 1,
             activeReadings: isActive ? 1 : 0,
             totalPower: Math.abs(power),
+            totalInstantaneousPower: instantaneousPower,
             maxPower: Math.abs(power)
           });
         }
@@ -265,7 +285,8 @@ const Charts = () => {
         uptime: Number(
           ((item.activeReadings / item.totalReadings) * 100).toFixed(1)
         ),
-        avgEnergy: Number((item.totalPower / item.totalReadings).toFixed(2))
+        avgEnergy: Number((item.totalPower / item.totalReadings).toFixed(2)),
+        avgInstantaneousPower: Number((item.totalInstantaneousPower / item.totalReadings).toFixed(2))
       }));
 
     return { hourlyData, minuteData, dailyData, weeklyData, circuitData, performanceData };
@@ -384,6 +405,9 @@ const Charts = () => {
             <TabsTrigger value="hourly" className="data-[state=active]:bg-slate-700">
               Hourly View
             </TabsTrigger>
+            <TabsTrigger value="power" className="data-[state=active]:bg-slate-700">
+              Power Analysis
+            </TabsTrigger>
             <TabsTrigger value="daily" className="data-[state=active]:bg-slate-700">
               Daily Overview
             </TabsTrigger>
@@ -433,9 +457,9 @@ const Charts = () => {
 
               <Card className="bg-slate-800 border-slate-700">
                 <CardHeader>
-                  <CardTitle className="text-white">Minute-by-Minute Voltage & Current ({selectedDate})</CardTitle>
+                  <CardTitle className="text-white">Minute-by-Minute DC Parameters ({selectedDate})</CardTitle>
                   <CardDescription className="text-slate-400">
-                    DC and AC electrical parameters by minute
+                    DC voltage, current, and instantaneous power by minute
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -462,14 +486,71 @@ const Charts = () => {
                         name="DC Current (A)"
                       />
                       <Bar
-                        dataKey="acVoltage"
+                        dataKey="instantaneousPower"
                         fill="#ef4444"
-                        name="AC Voltage (V)"
+                        name="Instantaneous Power (W)"
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          {/* Power Analysis */}
+          <TabsContent value="power" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card className="bg-slate-800 border-slate-700">
+                <CardHeader>
+                  <CardTitle className="text-white">Hourly Average Power ({selectedDate})</CardTitle>
+                  <CardDescription className="text-slate-400">
+                    Average power consumption per hour
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <LineChart data={hourlyData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
+                      <XAxis dataKey="time" stroke="#94a3b8" />
+                      <YAxis stroke="#94a3b8" />
+                      <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569' }} />
+                      <Legend />
+                      <Line
+                        type="monotone"
+                        dataKey="avgPowerPerHour"
+                        stroke="#10b981"
+                        strokeWidth={2}
+                        name="Avg Power/Hour (W)"
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-slate-800 border-slate-700">
+                <CardHeader>
+                  <CardTitle className="text-white">Instantaneous vs Average Power ({selectedDate})</CardTitle>
+                  <CardDescription className="text-slate-400">
+                    Comparison of instantaneous and average power by hour
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={hourlyData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
+                      <XAxis dataKey="time" stroke="#94a3b8" />
+                      <YAxis stroke="#94a3b8" />
+                      <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569' }} />
+                      <Legend />
+                      <Bar
+                        dataKey="avgInstantaneousPower"
+                        fill="#3b82f6"
+                        name="Avg Instantaneous Power (W)"
                       />
                       <Bar
-                        dataKey="acCurrent"
-                        fill="#06b6d4"
-                        name="AC Current (A)"
+                        dataKey="avgPowerPerHour"
+                        fill="#f59e0b"
+                        name="Avg Power/Hour (W)"
                       />
                     </BarChart>
                   </ResponsiveContainer>
@@ -505,9 +586,9 @@ const Charts = () => {
 
               <Card className="bg-slate-800 border-slate-700">
                 <CardHeader>
-                  <CardTitle className="text-white">Daily Voltage & Current Trends</CardTitle>
+                  <CardTitle className="text-white">Daily DC Parameters & Power</CardTitle>
                   <CardDescription className="text-slate-400">
-                    Average electrical parameters over the last 14 days
+                    Average DC parameters and power over the last 14 days
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -529,14 +610,9 @@ const Charts = () => {
                         name="Avg DC Current (A)"
                       />
                       <Bar
-                        dataKey="acVoltage"
+                        dataKey="instantaneousPower"
                         fill="#ef4444"
-                        name="Avg AC Voltage (V)"
-                      />
-                      <Bar
-                        dataKey="acCurrent"
-                        fill="#06b6d4"
-                        name="Avg AC Current (A)"
+                        name="Avg Instantaneous Power (W)"
                       />
                     </BarChart>
                   </ResponsiveContainer>
@@ -595,9 +671,9 @@ const Charts = () => {
 
               <Card className="bg-slate-800 border-slate-700">
                 <CardHeader>
-                  <CardTitle className="text-white">Circuit Consumption Comparison</CardTitle>
+                  <CardTitle className="text-white">Circuit Instantaneous Power</CardTitle>
                   <CardDescription className="text-slate-400">
-                    Individual circuit monitoring
+                    Average instantaneous power by circuit
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -608,7 +684,8 @@ const Charts = () => {
                       <YAxis stroke="#94a3b8" />
                       <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569' }} />
                       <Legend />
-                      <Bar dataKey="consumption" fill="#3b82f6" name="Consumption (kW)" />
+                      <Bar dataKey="avgInstantaneousPower" fill="#3b82f6" name="Avg Instantaneous Power (W)" />
+                      <Bar dataKey="consumption" fill="#f59e0b" name="Consumption (kW)" />
                     </BarChart>
                   </ResponsiveContainer>
                 </CardContent>
@@ -622,7 +699,7 @@ const Charts = () => {
               <CardHeader>
                 <CardTitle className="text-white">System Performance Metrics</CardTitle>
                 <CardDescription className="text-slate-400">
-                  Efficiency and uptime over recent months
+                  Efficiency, uptime and power metrics over recent months
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -647,6 +724,11 @@ const Charts = () => {
                       dataKey="avgEnergy"
                       fill="#f59e0b"
                       name="Avg Energy per Reading (kW)"
+                    />
+                    <Bar
+                      dataKey="avgInstantaneousPower"
+                      fill="#ef4444"
+                      name="Avg Instantaneous Power (W)"
                     />
                   </BarChart>
                 </ResponsiveContainer>
