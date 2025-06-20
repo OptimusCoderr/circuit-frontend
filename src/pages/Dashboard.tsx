@@ -30,14 +30,12 @@ const Dashboard = () => {
     clearError
   } = useCircuitStore();
 
-  // Local state for other data (can be moved to separate stores later)
-  const [realTimeData, setRealTimeData] = useState({
-    solarProduction: 4.2,
-    totalConsumption: 3.8,
-    circuit1Consumption: 1.2,
-    circuit2Consumption: 0.8,
-    gridImport: 0,
-    batteryLevel: 85
+  // Local state for system monitoring
+  const [systemData, setSystemData] = useState({
+    systemStatus: 'operational',
+    networkLatency: 12,
+    uptime: 96.8,
+    temperature: 24.5
   });
 
   // Initialize circuit data on component mount
@@ -66,31 +64,28 @@ const Dashboard = () => {
     }
   }, [circuitError, clearError]);
 
-  // Simulate real-time data updates (excluding circuit state)
+  // Simulate system monitoring updates
   useEffect(() => {
     const interval = setInterval(() => {
-      setRealTimeData(prev => ({
-        solarProduction: Math.max(0, prev.solarProduction + (Math.random() - 0.5) * 0.5),
-        totalConsumption: Math.max(0, prev.totalConsumption + (Math.random() - 0.5) * 0.3),
-        // Circuit consumption based on current states from store
-        circuit1Consumption: currentState === "1" ? Math.max(0, prev.circuit1Consumption + (Math.random() - 0.5) * 0.2) : 0,
-        circuit2Consumption: currentState1 === "1" ? Math.max(0, prev.circuit2Consumption + (Math.random() - 0.5) * 0.2) : 0,
-        gridImport: Math.max(0, prev.gridImport + (Math.random() - 0.5) * 0.2),
-        batteryLevel: Math.min(100, Math.max(0, prev.batteryLevel + (Math.random() - 0.5) * 2))
+      setSystemData(prev => ({
+        systemStatus: Math.random() > 0.1 ? 'operational' : 'warning',
+        networkLatency: Math.max(5, prev.networkLatency + (Math.random() - 0.5) * 4),
+        uptime: Math.min(100, Math.max(90, prev.uptime + (Math.random() - 0.5) * 0.5)),
+        temperature: Math.max(15, Math.min(35, prev.temperature + (Math.random() - 0.5) * 2))
       }));
-    }, 2000);
+    }, 3000);
 
     return () => clearInterval(interval);
-  }, [currentState, currentState1]);
+  }, []);
 
-  // Sample data for mini chart
-  const miniChartData = [
-    { time: '12:00', solar: 3.8, load: 2.1 },
-    { time: '13:00', solar: 4.1, load: 2.5 },
-    { time: '14:00', solar: 4.5, load: 2.8 },
-    { time: '15:00', solar: 4.2, load: 3.2 },
-    { time: '16:00', solar: 3.9, load: 3.8 },
-    { time: '17:00', solar: 3.2, load: 4.1 },
+  // Sample data for system monitoring chart
+  const systemChartData = [
+    { time: '12:00', uptime: 98.5, latency: 8 },
+    { time: '13:00', uptime: 97.8, latency: 12 },
+    { time: '14:00', uptime: 98.2, latency: 10 },
+    { time: '15:00', uptime: 96.9, latency: 15 },
+    { time: '16:00', uptime: 97.5, latency: 11 },
+    { time: '17:00', uptime: 96.8, latency: 13 },
   ];
 
   // Toggle circuit state using the store
@@ -140,7 +135,7 @@ const Dashboard = () => {
               <Zap className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-400" />
               <Activity className="h-2 w-2 sm:h-3 sm:w-3 text-blue-400 absolute -top-1 -right-1" />
             </div>
-            <h1 className="text-lg sm:text-xl font-bold text-white">Energy Monitor</h1>
+            <h1 className="text-lg sm:text-xl font-bold text-white">Circuit Monitor</h1>
           </div>
           
           {/* Desktop Navigation */}
@@ -210,49 +205,55 @@ const Dashboard = () => {
       </header>
 
       <div className="p-3 sm:p-6 space-y-4 sm:space-y-6">
-        {/* Real-time Stats - Mobile Optimized Grid */}
+        {/* System Status Cards - Mobile Optimized Grid */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           <Card className="bg-slate-800 border-slate-700">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
-              <CardTitle className="text-xs sm:text-sm font-medium text-slate-300">Solar Production</CardTitle>
-              <Sun className="h-3 w-3 sm:h-4 sm:w-4 text-yellow-400" />
+              <CardTitle className="text-xs sm:text-sm font-medium text-slate-300">System Status</CardTitle>
+              <Activity className={`h-3 w-3 sm:h-4 sm:w-4 ${systemData.systemStatus === 'operational' ? 'text-emerald-400' : 'text-yellow-400'}`} />
             </CardHeader>
             <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
-              <div className="text-lg sm:text-2xl font-bold text-white">{realTimeData.solarProduction.toFixed(1)} kW</div>
-              <p className="text-xs text-emerald-400">+12% from yesterday</p>
+              <div className="text-lg sm:text-2xl font-bold text-white capitalize">{systemData.systemStatus}</div>
+              <p className={`text-xs ${systemData.systemStatus === 'operational' ? 'text-emerald-400' : 'text-yellow-400'}`}>
+                All systems running
+              </p>
             </CardContent>
           </Card>
 
           <Card className="bg-slate-800 border-slate-700">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
-              <CardTitle className="text-xs sm:text-sm font-medium text-slate-300">Total Consumption</CardTitle>
-              <Home className="h-3 w-3 sm:h-4 sm:w-4 text-blue-400" />
+              <CardTitle className="text-xs sm:text-sm font-medium text-slate-300">Network Latency</CardTitle>
+              <Zap className="h-3 w-3 sm:h-4 sm:w-4 text-blue-400" />
             </CardHeader>
             <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
-              <div className="text-lg sm:text-2xl font-bold text-white">{realTimeData.totalConsumption.toFixed(1)} kW</div>
-              <p className="text-xs text-slate-400">Normal usage</p>
+              <div className="text-lg sm:text-2xl font-bold text-white">{systemData.networkLatency.toFixed(0)} ms</div>
+              <p className={`text-xs ${systemData.networkLatency < 20 ? 'text-emerald-400' : 'text-yellow-400'}`}>
+                {systemData.networkLatency < 20 ? 'Excellent' : 'Good'}
+              </p>
             </CardContent>
           </Card>
 
           <Card className="bg-slate-800 border-slate-700">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
-              <CardTitle className="text-xs sm:text-sm font-medium text-slate-300">Grid Import</CardTitle>
-              <Zap className="h-3 w-3 sm:h-4 sm:w-4 text-orange-400" />
+              <CardTitle className="text-xs sm:text-sm font-medium text-slate-300">System Uptime</CardTitle>
+              <BarChart3 className="h-3 w-3 sm:h-4 sm:w-4 text-emerald-400" />
             </CardHeader>
             <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
-              <div className="text-lg sm:text-2xl font-bold text-white">{realTimeData.gridImport.toFixed(1)} kW</div>
-              <p className="text-xs text-green-400">Minimal import</p>
+              <div className="text-lg sm:text-2xl font-bold text-white">{systemData.uptime.toFixed(1)}%</div>
+              <p className="text-xs text-emerald-400">High availability</p>
             </CardContent>
           </Card>
 
           <Card className="bg-slate-800 border-slate-700">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
-              <CardTitle className="text-xs sm:text-sm font-medium text-slate-300">Battery Level</CardTitle>
-              <Activity className="h-3 w-3 sm:h-4 sm:w-4 text-green-400" />
+              <CardTitle className="text-xs sm:text-sm font-medium text-slate-300">Temperature</CardTitle>
+              <Sun className="h-3 w-3 sm:h-4 sm:w-4 text-orange-400" />
             </CardHeader>
             <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
-              <div className="text-lg sm:text-2xl font-bold text-white">{realTimeData.batteryLevel.toFixed(0)}%</div>
-              <p className="text-xs text-green-400">Charging</p>
+              <div className="text-lg sm:text-2xl font-bold text-white">{systemData.temperature.toFixed(1)}°C</div>
+              <p className={`text-xs ${systemData.temperature < 30 ? 'text-emerald-400' : 'text-yellow-400'}`}>
+                {systemData.temperature < 30 ? 'Normal' : 'Warm'}
+              </p>
             </CardContent>
           </Card>
         </div>
@@ -281,7 +282,7 @@ const Dashboard = () => {
                 <div className="space-y-1 flex-1">
                   <h3 className="text-base sm:text-lg font-semibold text-white">Main Circuit (Kitchen)</h3>
                   <p className="text-sm text-slate-400">
-                    {realTimeData.circuit1Consumption.toFixed(1)} kW • {isMainCircuitOn ? 'Online' : 'Offline'}
+                    Status: {isMainCircuitOn ? 'Online' : 'Offline'}
                   </p>
                   {!isMainCircuitOn && (
                     <div className="flex items-center text-orange-400 text-xs">
@@ -315,7 +316,7 @@ const Dashboard = () => {
                 <div className="space-y-1 flex-1">
                   <h3 className="text-base sm:text-lg font-semibold text-white">Secondary Circuit (Garage)</h3>
                   <p className="text-sm text-slate-400">
-                    {realTimeData.circuit2Consumption.toFixed(1)} kW • {isSecondaryCircuitOn ? 'Online' : 'Offline'}
+                    Status: {isSecondaryCircuitOn ? 'Online' : 'Offline'}
                   </p>
                   {!isSecondaryCircuitOn && (
                     <div className="flex items-center text-orange-400 text-xs">
@@ -350,7 +351,7 @@ const Dashboard = () => {
                   <div className="space-y-1">
                     <h4 className="text-sm sm:text-md font-medium text-white">Kitchen Circuit Status</h4>
                     <p className="text-xs sm:text-sm text-slate-400">
-                      Power: {realTimeData.circuit1Consumption.toFixed(1)} kW
+                      Last Updated: {lastUpdated ? new Date(lastUpdated).toLocaleTimeString() : 'N/A'}
                     </p>
                     <div className={`flex items-center text-xs ${isMainCircuitOn ? 'text-emerald-400' : 'text-slate-500'}`}>
                       <div className={`w-2 h-2 rounded-full mr-2 ${isMainCircuitOn ? 'bg-emerald-400' : 'bg-slate-500'}`}></div>
@@ -363,7 +364,7 @@ const Dashboard = () => {
                   <div className="space-y-1">
                     <h4 className="text-sm sm:text-md font-medium text-white">Garage Circuit Status</h4>
                     <p className="text-xs sm:text-sm text-slate-400">
-                      Power: {realTimeData.circuit2Consumption.toFixed(1)} kW
+                      Last Updated: {lastUpdated ? new Date(lastUpdated).toLocaleTimeString() : 'N/A'}
                     </p>
                     <div className={`flex items-center text-xs ${isSecondaryCircuitOn ? 'text-emerald-400' : 'text-slate-500'}`}>
                       <div className={`w-2 h-2 rounded-full mr-2 ${isSecondaryCircuitOn ? 'bg-emerald-400' : 'bg-slate-500'}`}></div>
@@ -373,19 +374,19 @@ const Dashboard = () => {
                 </div>
               </div>
 
-              {/* Total Circuit Consumption */}
+              {/* Circuit Activity Summary */}
               <div className="p-3 sm:p-4 bg-slate-600 rounded-lg">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
                   <div className="flex-1">
-                    <h4 className="text-sm sm:text-md font-medium text-white">Total Circuit Consumption</h4>
-                    <p className="text-xs sm:text-sm text-slate-400">Combined power usage from all circuits</p>
+                    <h4 className="text-sm sm:text-md font-medium text-white">Circuit Activity Summary</h4>
+                    <p className="text-xs sm:text-sm text-slate-400">Overall circuit monitoring status</p>
                   </div>
                   <div className="text-left sm:text-right">
                     <div className="text-lg sm:text-xl font-bold text-white">
-                      {(realTimeData.circuit1Consumption + realTimeData.circuit2Consumption).toFixed(1)} kW
+                      {(isMainCircuitOn ? 1 : 0) + (isSecondaryCircuitOn ? 1 : 0)} / 2
                     </div>
                     <p className="text-xs text-slate-400">
-                      {(isMainCircuitOn ? 1 : 0) + (isSecondaryCircuitOn ? 1 : 0)} of 2 circuits active
+                      Circuits currently active
                     </p>
                   </div>
                 </div>
@@ -394,17 +395,17 @@ const Dashboard = () => {
           </CardContent>
         </Card>
 
-        {/* Mini Chart - Mobile Optimized */}
+        {/* System Monitoring Chart - Mobile Optimized */}
         <Card className="bg-slate-800 border-slate-700">
           <CardHeader className="px-4 sm:px-6">
-            <CardTitle className="text-white text-lg sm:text-xl">Today's Overview</CardTitle>
+            <CardTitle className="text-white text-lg sm:text-xl">System Performance</CardTitle>
             <CardDescription className="text-slate-400 text-sm">
-              Solar production vs consumption (last 6 hours)
+              System uptime and network latency monitoring (last 6 hours)
             </CardDescription>
           </CardHeader>
           <CardContent className="px-2 sm:px-6">
             <ResponsiveContainer width="100%" height={180}>
-              <LineChart data={miniChartData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+              <LineChart data={systemChartData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
                 <XAxis 
                   dataKey="time" 
@@ -427,18 +428,18 @@ const Dashboard = () => {
                 />
                 <Line 
                   type="monotone" 
-                  dataKey="solar" 
+                  dataKey="uptime" 
                   stroke="#10b981" 
                   strokeWidth={2}
-                  name="Solar (kW)"
+                  name="Uptime (%)"
                   dot={{ fill: '#10b981', strokeWidth: 1, r: 3 }}
                 />
                 <Line 
                   type="monotone" 
-                  dataKey="load" 
+                  dataKey="latency" 
                   stroke="#3b82f6" 
                   strokeWidth={2}
-                  name="Load (kW)"
+                  name="Latency (ms)"
                   dot={{ fill: '#3b82f6', strokeWidth: 1, r: 3 }}
                 />
               </LineChart>
