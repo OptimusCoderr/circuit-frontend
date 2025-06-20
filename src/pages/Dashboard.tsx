@@ -4,16 +4,29 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Zap, Activity, BarChart3, Sun, Home, AlertTriangle, LogOut } from 'lucide-react';
+import { Zap, Activity, BarChart3, Sun, Home, AlertTriangle, LogOut, Loader2 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { useAuthStore } from '@/store/auth.store';
+import { useAuthStore } from '../store/auth.store.ts';
+import useCircuitStore, { CircuitState } from '../store/control.store.ts';
 import toast from 'react-hot-toast';
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const { logout, isLoading } = useAuthStore();
-  const [circuit1, setCircuit1] = useState(true);
-  const [circuit2, setCircuit2] = useState(false);
+  
+  // Circuit store integration
+  const {
+    currentState,
+    loading: circuitLoading,
+    error: circuitError,
+    lastUpdated,
+    updateCircuitState,
+    getCurrentState,
+    getCircuitHistory,
+    clearError
+  } = useCircuitStore();
+
+  // Local state for other data (can be moved to separate stores later)
   const [realTimeData, setRealTimeData] = useState({
     solarProduction: 4.2,
     totalConsumption: 3.8,
@@ -23,21 +36,45 @@ const Dashboard = () => {
     batteryLevel: 85
   });
 
-  // Simulate real-time data updates
+  // Initialize circuit data on component mount
+  useEffect(() => {
+    const initializeCircuitData = async () => {
+      try {
+        await getCurrentState();
+        await getCircuitHistory();
+      } catch (error) {
+        console.error('Failed to initialize circuit data:', error);
+        toast.error('Failed to load circuit data');
+      }
+    };
+
+    initializeCircuitData();
+  }, [getCurrentState, getCircuitHistory]);
+
+  // Handle circuit errors
+  useEffect(() => {
+    if (circuitError) {
+      toast.error(circuitError);
+      clearError();
+    }
+  }, [circuitError, clearError]);
+
+  // Simulate real-time data updates (excluding circuit state)
   useEffect(() => {
     const interval = setInterval(() => {
       setRealTimeData(prev => ({
         solarProduction: Math.max(0, prev.solarProduction + (Math.random() - 0.5) * 0.5),
         totalConsumption: Math.max(0, prev.totalConsumption + (Math.random() - 0.5) * 0.3),
-        circuit1Consumption: circuit1 ? Math.max(0, prev.circuit1Consumption + (Math.random() - 0.5) * 0.2) : 0,
-        circuit2Consumption: circuit2 ? Math.max(0, prev.circuit2Consumption + (Math.random() - 0.5) * 0.2) : 0,
+        // Circuit consumption based on current state from store
+        circuit1Consumption: currentState === "1" ? Math.max(0, prev.circuit1Consumption + (Math.random() - 0.5) * 0.2) : 0,
+        circuit2Consumption: currentState === "1" ? Math.max(0, prev.circuit2Consumption + (Math.random() - 0.5) * 0.2) : 0,
         gridImport: Math.max(0, prev.gridImport + (Math.random() - 0.5) * 0.2),
         batteryLevel: Math.min(100, Math.max(0, prev.batteryLevel + (Math.random() - 0.5) * 2))
       }));
     }, 2000);
 
     return () => clearInterval(interval);
-  }, [circuit1, circuit2]);
+  }, [currentState]);
 
   // Sample data for mini chart
   const miniChartData = [
@@ -49,18 +86,16 @@ const Dashboard = () => {
     { time: '17:00', solar: 3.2, load: 4.1 },
   ];
 
-  const toggleCircuit = (circuitNumber: number) => {
-    if (circuitNumber === 1) {
-      setCircuit1(!circuit1);
-      console.log(`Circuit 1 ${!circuit1 ? 'ON' : 'OFF'}`);
-    } else {
-      setCircuit2(!circuit2);
-      console.log(`Circuit 2 ${!circuit2 ? 'ON' : 'OFF'}`);
+  // Toggle circuit state using the store
+  const toggleCircuit = async (newState: CircuitState) => {
+    try {
+      await updateCircuitState(newState);
+      toast.success(`Circuit ${newState === "1" ? 'enabled' : 'disabled'} successfully`);
+    } catch (error) {
+      console.error('Failed to toggle circuit:', error);
+      // Error toast is handled by the useEffect above
     }
   };
-
-
-  
 
   const handleLogout = async () => {
     try {
@@ -72,6 +107,9 @@ const Dashboard = () => {
       toast.error('Failed to log out');
     }
   };
+
+  // Helper function to determine circuit status
+  const isCircuitOn = currentState === "1";
 
   return (
     <div className="min-h-screen bg-slate-900">
@@ -96,8 +134,9 @@ const Dashboard = () => {
               variant="outline" 
               onClick={handleLogout}
               className="border-slate-600 text-slate-300 hover:bg-slate-700"
+              disabled={isLoading}
             >
-              <LogOut className="h-4 w-4 mr-2" />
+              {isLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <LogOut className="h-4 w-4 mr-2" />}
               Logout
             </Button>
             <Badge variant="outline" className="border-emerald-500 text-emerald-400">
@@ -158,53 +197,80 @@ const Dashboard = () => {
         {/* Circuit Controls */}
         <Card className="bg-slate-800 border-slate-700">
           <CardHeader>
-            <CardTitle className="text-white">Circuit Control</CardTitle>
-            <CardDescription className="text-slate-400">
-              Monitor and control individual circuits remotely
-            </CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-white">Circuit Control</CardTitle>
+                <CardDescription className="text-slate-400">
+                  Monitor and control circuits remotely
+                </CardDescription>
+              </div>
+              {lastUpdated && (
+                <p className="text-xs text-slate-400">
+                  Last updated: {new Date(lastUpdated).toLocaleTimeString()}
+                </p>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Circuit 1 */}
+            <div className="space-y-4">
+              {/* Main Circuit Control */}
               <div className="flex items-center justify-between p-4 bg-slate-700 rounded-lg">
                 <div className="space-y-1">
-                  <h3 className="text-lg font-semibold text-white">Circuit 1 - Kitchen</h3>
+                  <h3 className="text-lg font-semibold text-white">Main Circuit</h3>
                   <p className="text-sm text-slate-400">
-                    {realTimeData.circuit1Consumption.toFixed(1)} kW • {circuit1 ? 'Online' : 'Offline'}
+                    {(realTimeData.circuit1Consumption + realTimeData.circuit2Consumption).toFixed(1)} kW • {isCircuitOn ? 'Online' : 'Offline'}
                   </p>
-                  {!circuit1 && (
+                  {!isCircuitOn && (
                     <div className="flex items-center text-orange-400 text-xs">
                       <AlertTriangle className="h-3 w-3 mr-1" />
                       Circuit disabled
                     </div>
                   )}
+                  {currentState === null && (
+                    <div className="flex items-center text-yellow-400 text-xs">
+                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                      Loading state...
+                    </div>
+                  )}
                 </div>
-                <Switch
-                  checked={circuit1}
-                  onCheckedChange={() => toggleCircuit(1)}
-                  className="data-[state=checked]:bg-emerald-500"
-                />
+                <div className="flex items-center space-x-2">
+                  {circuitLoading && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
+                  <Switch
+                    checked={isCircuitOn}
+                    onCheckedChange={(checked) => toggleCircuit(checked ? "1" : "0")}
+                    disabled={circuitLoading || currentState === null}
+                    className="data-[state=checked]:bg-emerald-500"
+                  />
+                </div>
               </div>
 
-              {/* Circuit 2 */}
-              <div className="flex items-center justify-between p-4 bg-slate-700 rounded-lg">
-                <div className="space-y-1">
-                  <h3 className="text-lg font-semibold text-white">Circuit 2 - Garage</h3>
-                  <p className="text-sm text-slate-400">
-                    {realTimeData.circuit2Consumption.toFixed(1)} kW • {circuit2 ? 'Online' : 'Offline'}
-                  </p>
-                  {!circuit2 && (
-                    <div className="flex items-center text-orange-400 text-xs">
-                      <AlertTriangle className="h-3 w-3 mr-1" />
-                      Circuit disabled
+              {/* Sub-circuits (for display only, controlled by main circuit) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className={`p-4 rounded-lg border ${isCircuitOn ? 'bg-slate-700 border-slate-600' : 'bg-slate-800 border-slate-700 opacity-60'}`}>
+                  <div className="space-y-1">
+                    <h4 className="text-md font-medium text-white">Kitchen Circuit</h4>
+                    <p className="text-sm text-slate-400">
+                      {realTimeData.circuit1Consumption.toFixed(1)} kW
+                    </p>
+                    <div className={`flex items-center text-xs ${isCircuitOn ? 'text-emerald-400' : 'text-slate-500'}`}>
+                      <div className={`w-2 h-2 rounded-full mr-2 ${isCircuitOn ? 'bg-emerald-400' : 'bg-slate-500'}`}></div>
+                      {isCircuitOn ? 'Active' : 'Inactive'}
                     </div>
-                  )}
+                  </div>
                 </div>
-                <Switch
-                  checked={circuit2}
-                  onCheckedChange={() => toggleCircuit(2)}
-                  className="data-[state=checked]:bg-emerald-500"
-                />
+
+                <div className={`p-4 rounded-lg border ${isCircuitOn ? 'bg-slate-700 border-slate-600' : 'bg-slate-800 border-slate-700 opacity-60'}`}>
+                  <div className="space-y-1">
+                    <h4 className="text-md font-medium text-white">Garage Circuit</h4>
+                    <p className="text-sm text-slate-400">
+                      {realTimeData.circuit2Consumption.toFixed(1)} kW
+                    </p>
+                    <div className={`flex items-center text-xs ${isCircuitOn ? 'text-emerald-400' : 'text-slate-500'}`}>
+                      <div className={`w-2 h-2 rounded-full mr-2 ${isCircuitOn ? 'bg-emerald-400' : 'bg-slate-500'}`}></div>
+                      {isCircuitOn ? 'Active' : 'Inactive'}
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </CardContent>
