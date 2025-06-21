@@ -142,7 +142,7 @@ const minuteData = flattenedReadings
         ((existing.acCurrent * (existing.count - 1)) + reading.ACcurrent) /
         existing.count;
       existing.acCurrentScaled =
-        ((existing.acCurrentScaled * (existing.count - 1)) + (reading.ACcurrent * 10)) /
+        ((existing.acCurrentScaled * (existing.count - 1)) + (reading.ACcurrent * 100)) /
         existing.count;
     } else {
       acc.push({
@@ -447,44 +447,43 @@ const minuteData = flattenedReadings
                 </CardContent>
               </Card>
 
-              // Then replace the chart section with this:
-              <Card className="bg-slate-800 border-slate-700">
-                <CardHeader>
-                  <CardTitle className="text-white">Minute-by-Minute AC Voltage & Current ({selectedDate})</CardTitle>
-                  <CardDescription className="text-slate-400">
-                    AC electrical parameters by minute (Current scaled 10x for visibility)
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={minuteData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
-                      <XAxis 
-                        dataKey="time" 
-                        stroke="#94a3b8" 
-                        interval="preserveStartEnd"
-                        tick={{ fontSize: 10 }}
-                      />
-                      <YAxis stroke="#94a3b8" />
-                      <Tooltip 
-                        contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569' }}
-                        formatter={formatTooltipValue}
-                      />
-                      <Legend />
-                      <Bar
-                        dataKey="acVoltage"
-                        fill="#ef4444"
-                        name="AC Voltage (V)"
-                      />
-                      <Bar
-                        dataKey="acCurrentScaled"
-                        fill="#06b6d4"
-                        name="AC Current (A × 10)"
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
+            <Card className="bg-slate-800 border-slate-700">
+              <CardHeader>
+                <CardTitle className="text-white">Minute-by-Minute AC Voltage & Current ({selectedDate})</CardTitle>
+                <CardDescription className="text-slate-400">
+                  AC electrical parameters by minute (Current scaled 100x for visibility)
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={minuteData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
+                    <XAxis 
+                      dataKey="time" 
+                      stroke="#94a3b8" 
+                      interval="preserveStartEnd"
+                      tick={{ fontSize: 10 }}
+                    />
+                    <YAxis stroke="#94a3b8" />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569' }}
+                      formatter={formatTooltipValue}
+                    />
+                    <Legend />
+                    <Bar
+                      dataKey="acVoltage"
+                      fill="#ef4444"
+                      name="AC Voltage (V)"
+                    />
+                    <Bar
+                      dataKey="acCurrentScaled"
+                      fill="#06b6d4"
+                      name="AC Current (A × 100)"
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
             </div>
           </TabsContent>
 
