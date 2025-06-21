@@ -107,50 +107,76 @@ const Charts = () => {
         return acc;
       }, []);
 
-    // Minute Data (voltage and current by minute)
-    const minuteData = flattenedReadings
-      .filter((reading) => {
-        const readingDate = new Date(reading.timestamp).toISOString().split('T')[0];
-        return readingDate === selectedDate;
-      })
-      .sort(
-        (a, b) =>
-          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-      )
-      .reduce((acc, reading) => {
-        const date = new Date(reading.timestamp);
-        const hour = date.getHours();
-        const minute = date.getMinutes();
-        const time = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-        const existing = acc.find((item) => item.time === time);
 
-        if (existing) {
-          existing.count++;
-          existing.voltage =
-            ((existing.voltage * (existing.count - 1)) + reading.voltage) /
-            existing.count;
-          existing.current =
-            ((existing.current * (existing.count - 1)) + reading.current) /
-            existing.count;
-          existing.acVoltage =
-            ((existing.acVoltage * (existing.count - 1)) + reading.ACvoltage) /
-            existing.count;
-          existing.acCurrent =
-            ((existing.acCurrent * (existing.count - 1)) + reading.ACcurrent) /
-            existing.count;
-        } else {
-          acc.push({
-            time,
-            voltage: reading.voltage,
-            current: reading.current,
-            acVoltage: reading.ACvoltage,
-            acCurrent: reading.ACcurrent,
-            count: 1
-          });
-        }
 
-        return acc;
-      }, []);
+// First, update your minuteData processing to include scaled current:
+const minuteData = flattenedReadings
+  .filter((reading) => {
+    const readingDate = new Date(reading.timestamp).toISOString().split('T')[0];
+    return readingDate === selectedDate;
+  })
+  .sort(
+    (a, b) =>
+      new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+  )
+  .reduce((acc, reading) => {
+    const date = new Date(reading.timestamp);
+    const hour = date.getHours();
+    const minute = date.getMinutes();
+    const time = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+    const existing = acc.find((item) => item.time === time);
+
+    if (existing) {
+      existing.count++;
+      existing.voltage =
+        ((existing.voltage * (existing.count - 1)) + reading.voltage) /
+        existing.count;
+      existing.current =
+        ((existing.current * (existing.count - 1)) + reading.current) /
+        existing.count;
+      existing.acVoltage =
+        ((existing.acVoltage * (existing.count - 1)) + reading.ACvoltage) /
+        existing.count;
+      existing.acCurrent =
+        ((existing.acCurrent * (existing.count - 1)) + reading.ACcurrent) /
+        existing.count;
+      existing.acCurrentScaled =
+        ((existing.acCurrentScaled * (existing.count - 1)) + (reading.ACcurrent * 10)) /
+        existing.count;
+    } else {
+      acc.push({
+        time,
+        voltage: reading.voltage,
+        current: reading.current,
+        acVoltage: reading.ACvoltage,
+        acCurrent: reading.ACcurrent,
+        acCurrentScaled: reading.ACcurrent * 10, // Scale up by 10 for display
+        count: 1
+      });
+    }
+
+    return acc;
+  }, []);
+
+  // Custom tooltip component
+const CustomTooltip = ({ active, payload, label }) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="bg-slate-800 border border-slate-600 p-3 rounded shadow-lg">
+        <p className="text-slate-300 mb-2">{`Time: ${label}`}</p>
+        {payload.map((entry, index) => (
+          <p key={index} style={{ color: entry.color }} className="mb-1">
+            {entry.dataKey === 'acCurrentScaled' 
+              ? `AC Current: ${(entry.payload.acCurrent).toFixed(3)} A` 
+              : `${entry.name}: ${entry.value.toFixed(2)} V`
+            }
+          </p>
+        ))}
+      </div>
+    );
+  }
+  return null;
+};
 
     // Daily Data (averaged over multiple days)
     const dailyData = flattenedReadings
@@ -431,11 +457,12 @@ const Charts = () => {
                 </CardContent>
               </Card>
 
+              // Then replace the chart section with this:
               <Card className="bg-slate-800 border-slate-700">
                 <CardHeader>
                   <CardTitle className="text-white">Minute-by-Minute AC Voltage & Current ({selectedDate})</CardTitle>
                   <CardDescription className="text-slate-400">
-                    AC electrical parameters by minute
+                    AC electrical parameters by minute (Current scaled 10x for visibility)
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -449,7 +476,7 @@ const Charts = () => {
                         tick={{ fontSize: 10 }}
                       />
                       <YAxis stroke="#94a3b8" />
-                      <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569' }} />
+                      <Tooltip content={<CustomTooltip />} />
                       <Legend />
                       <Bar
                         dataKey="acVoltage"
@@ -457,9 +484,9 @@ const Charts = () => {
                         name="AC Voltage (V)"
                       />
                       <Bar
-                        dataKey="acCurrent"
+                        dataKey="acCurrentScaled"
                         fill="#06b6d4"
-                        name="AC Current (A)"
+                        name="AC Current (A × 10)"
                       />
                     </BarChart>
                   </ResponsiveContainer>
