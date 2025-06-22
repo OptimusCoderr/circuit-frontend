@@ -16,7 +16,9 @@ import {
 } from '@/components/ui/tabs';
 import {
   ArrowLeft,
-  Download
+  Download,
+  Calendar,
+  AlertCircle
 } from 'lucide-react';
 import {
   BarChart,
@@ -28,6 +30,8 @@ import {
   Legend,
   ResponsiveContainer
 } from 'recharts';
+
+
 // Import Zustand store
 import useEnergyDataStore from '../store/energydata.store';
 
@@ -50,7 +54,7 @@ const Charts = () => {
 
   // Fetch data on mount
   useEffect(() => {
-    fetchFlattenedReadings();
+    fetchFlattenedReadings(); // Fetch all readings by default
     const loadAggregated = async () => {
       try {
         const hourly = await fetchAggregatedData({ groupBy: 'hour' });
@@ -64,9 +68,11 @@ const Charts = () => {
     loadAggregated();
   }, [fetchFlattenedReadings, fetchAggregatedData]);
 
+  // Process data for charting
   const processedData = useMemo(() => {
     if (!flattenedReadings.length) return null;
 
+    // Hourly Data (power grouped by hour)
     const hourlyData = flattenedReadings
       .filter((reading) => {
         const readingDate = new Date(reading.timestamp).toISOString().split('T')[0];
@@ -80,6 +86,7 @@ const Charts = () => {
         const hour = new Date(reading.timestamp).getHours();
         const time = `${hour.toString().padStart(2, '0')}:00`;
         const existing = acc.find((item) => item.time === time);
+
         if (existing) {
           existing.count++;
           existing.solar =
@@ -97,50 +104,70 @@ const Charts = () => {
             count: 1
           });
         }
+
         return acc;
       }, []);
 
-    const minuteData = flattenedReadings
-      .filter((reading) => {
-        const readingDate = new Date(reading.timestamp).toISOString().split('T')[0];
-        return readingDate === selectedDate;
-      })
-      .sort(
-        (a, b) =>
-          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-      )
-      .reduce((acc, reading) => {
-        const date = new Date(reading.timestamp);
-        const hour = date.getHours();
-        const minute = date.getMinutes();
-        const time = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-        const existing = acc.find((item) => item.time === time);
-        if (existing) {
-          existing.count++;
-          existing.acVoltage =
-            ((existing.acVoltage * (existing.count - 1)) + reading.ACvoltage) / existing.count;
-          existing.acCurrent =
-            ((existing.acCurrent * (existing.count - 1)) + reading.ACcurrent) / existing.count;
-          existing.acCurrentScaled =
-            ((existing.acCurrentScaled * (existing.count - 1)) + reading.ACcurrent * 100) /
-            existing.count;
-        } else {
-          acc.push({
-            time,
-            acVoltage: reading.ACvoltage,
-            acCurrent: reading.ACcurrent,
-            acCurrentScaled: reading.ACcurrent * 10,
-            count: 1
-          });
-        }
-        return acc;
-      }, []);
 
+
+// First, update your minuteData processing to include scaled current:
+const minuteData = flattenedReadings
+  .filter((reading) => {
+    const readingDate = new Date(reading.timestamp).toISOString().split('T')[0];
+    return readingDate === selectedDate;
+  })
+  .sort(
+    (a, b) =>
+      new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+  )
+  .reduce((acc, reading) => {
+    const date = new Date(reading.timestamp);
+    const hour = date.getHours();
+    const minute = date.getMinutes();
+    const time = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+    const existing = acc.find((item) => item.time === time);
+
+    if (existing) {
+      existing.count++;
+      existing.voltage =
+        ((existing.voltage * (existing.count - 1)) + reading.voltage) /
+        existing.count;
+      existing.current =
+        ((existing.current * (existing.count - 1)) + reading.current) /
+        existing.count;
+      existing.acVoltage =
+        ((existing.acVoltage * (existing.count - 1)) + reading.ACvoltage) /
+        existing.count;
+      existing.acCurrent =
+        ((existing.acCurrent * (existing.count - 1)) + reading.ACcurrent) /
+        existing.count;
+      existing.acCurrentScaled =
+        ((existing.acCurrentScaled * (existing.count - 1)) + (reading.ACcurrent * 100)) /
+        existing.count;
+    } else {
+      acc.push({
+        time,
+        voltage: reading.voltage,
+        current: reading.current,
+        acVoltage: reading.ACvoltage,
+        acCurrent: reading.ACcurrent,
+        acCurrentScaled: reading.ACcurrent * 10, // Scale up by 10 for display
+        count: 1
+      });
+    }
+
+    return acc;
+  }, []);
+
+
+
+    // Daily Data (averaged over multiple days)
     const dailyData = flattenedReadings
       .reduce((acc, reading) => {
         const date = new Date(reading.timestamp);
         const day = date.toISOString().split('T')[0];
         const existing = acc.find((item) => item.day === day);
+
         if (existing) {
           existing.count++;
           existing.solar =
@@ -149,6 +176,12 @@ const Charts = () => {
             existing.count;
           existing.load =
             ((existing.load * (existing.count - 1)) + Math.abs(reading.power)) /
+            existing.count;
+          existing.voltage =
+            ((existing.voltage * (existing.count - 1)) + reading.voltage) /
+            existing.count;
+          existing.current =
+            ((existing.current * (existing.count - 1)) + reading.current) /
             existing.count;
           existing.acVoltage =
             ((existing.acVoltage * (existing.count - 1)) + reading.ACvoltage) /
@@ -156,26 +189,26 @@ const Charts = () => {
           existing.acCurrent =
             ((existing.acCurrent * (existing.count - 1)) + reading.ACcurrent) /
             existing.count;
-          existing.acCurrentScaled =
-            ((existing.acCurrentScaled * (existing.count - 1)) + (reading.ACcurrent * 100)) /
-            existing.count;
         } else {
           acc.push({
             day,
             dayLabel: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
             solar: reading.power > 0 ? reading.power : 0,
             load: Math.abs(reading.power),
+            voltage: reading.voltage,
+            current: reading.current,
             acVoltage: reading.ACvoltage,
             acCurrent: reading.ACcurrent,
-            acCurrentScaled: reading.ACcurrent * 100,
             count: 1
           });
         }
+
         return acc;
       }, [])
       .sort((a, b) => new Date(a.day).getTime() - new Date(b.day).getTime())
-      .slice(-14);
+      .slice(-14); // Last 14 days
 
+    // Weekly Data
     const weeklyData = aggregatedData.daily?.length
       ? aggregatedData.daily.slice(0, 7).map((item, index) => ({
           day: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][index % 7],
@@ -184,6 +217,7 @@ const Charts = () => {
         }))
       : [];
 
+    // Circuit Data - modified for bar chart
     const circuitData = flattenedReadings
       .reduce((acc, reading) => {
         const name =
@@ -192,20 +226,23 @@ const Charts = () => {
             : `Circuit ${reading.circuit || 'Unknown'}`;
         const power = reading.power || 0;
         const existing = acc.find((item) => item.name === name);
+
         if (existing) {
           existing.total += power;
           existing.count += 1;
         } else {
           acc.push({ name, total: power, count: 1 });
         }
+
         return acc;
       }, [])
-      .map((item) => ({
+      .map((item, i) => ({
         name: item.name,
         value: Number((Math.abs(item.total / item.count)).toFixed(2)),
         consumption: Number((Math.abs(item.total / item.count)).toFixed(2))
       }));
 
+    // Performance Data
     const performanceData = flattenedReadings
       .reduce((acc, reading) => {
         const date = new Date(reading.timestamp);
@@ -213,6 +250,7 @@ const Charts = () => {
         const isActive = reading.status === 'active';
         const power = reading.power || 0;
         const existing = acc.find((item) => item.month === month);
+
         if (existing) {
           existing.totalReadings += 1;
           existing.activeReadings += isActive ? 1 : 0;
@@ -227,12 +265,15 @@ const Charts = () => {
             maxPower: Math.abs(power)
           });
         }
+
         return acc;
       }, [])
       .map((item) => ({
         month: item.month,
         efficiency: Number((item.totalPower / item.totalReadings).toFixed(1)),
-        uptime: Number(((item.activeReadings / item.totalReadings) * 100).toFixed(1)),
+        uptime: Number(
+          ((item.activeReadings / item.totalReadings) * 100).toFixed(1)
+        ),
         avgEnergy: Number((item.totalPower / item.totalReadings).toFixed(2))
       }));
 
@@ -266,10 +307,10 @@ const Charts = () => {
       endDate: endDate.toISOString()
     });
   };
-
-  const formatTooltipValue = (value: any, name: string, props: any) => {
+  // Custom formatter for tooltip
+  const formatTooltipValue = (value, name, props) => {
     if (name === 'AC Current (A × 10)') {
-      return [`${props.payload.acCurrent.toFixed(3)} A`, 'AC Current (Actual)'];
+      return [`${(props.payload.acCurrent).toFixed(3)} A`, 'AC Current (Actual)'];
     }
     return [`${value.toFixed(2)} V`, name];
   };
@@ -320,173 +361,216 @@ const Charts = () => {
   const { hourlyData, minuteData, dailyData, weeklyData, circuitData, performanceData } = processedData;
 
   return (
-    <div className="min-h-screen bg-slate-900 px-3 sm:px-6 py-4">
+    <div className="min-h-screen bg-slate-900">
       {/* Header */}
-      <header className="bg-slate-800 border-b border-slate-700 rounded-lg p-4 mb-6 shadow-sm">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+      <header className="bg-slate-800 border-b border-slate-700 px-6 py-4">
+        <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <Link to="/dashboard">
               <Button variant="ghost" size="sm" className="text-slate-400 hover:text-white">
                 <ArrowLeft className="h-4 w-4 mr-2" />
-                <span className="hidden sm:inline">Back to Dashboard</span>
-                <span className="sm:hidden">Back</span>
+                Back to Dashboard
               </Button>
             </Link>
-            <h1 className="text-lg sm:text-xl font-bold text-white">Energy Analytics</h1>
+            <h1 className="text-xl font-bold text-white">Energy Analytics</h1>
           </div>
-          <div className="flex items-center space-x-2 w-full sm:w-auto">
+          <div className="flex items-center space-x-2">
             <input
               type="date"
               value={selectedDate}
               onChange={(e) => handleDateChange(e.target.value)}
-              className="w-full sm:w-auto px-3 py-1 bg-slate-700 border border-slate-600 rounded text-sm text-slate-300"
+              className="px-3 py-1 bg-slate-700 border border-slate-600 rounded text-sm text-slate-300"
             />
             <Button
               variant="outline"
               size="sm"
-              className="border-slate-600 text-slate-300 hover:bg-slate-700 whitespace-nowrap"
+              className="border-slate-600 text-slate-300 hover:bg-slate-700"
               onClick={handleExport}
             >
-              <Download className="h-4 w-4 mr-1" />
-              <span className="hidden sm:inline">Export</span>
-              <span className="sm:hidden">Export</span>
+              <Download className="h-4 w-4 mr-2" />
+              Export
             </Button>
           </div>
         </div>
       </header>
 
-      <main className="space-y-4 sm:space-y-6">
-        <Tabs defaultValue="hourly" className="w-full">
-          {/* Mobile-friendly Tabs List */}
-          <TabsList className="grid grid-cols-2 sm:grid-cols-5 gap-1 w-full bg-slate-800 border-slate-700 p-1">
-            <TabsTrigger value="hourly" className="py-2 text-xs sm:text-sm data-[state=active]:bg-slate-700">
-              Hourly
+      <div className="p-6">
+        <Tabs defaultValue="hourly" className="space-y-6">
+          <TabsList className="bg-slate-800 border-slate-700">
+            <TabsTrigger value="hourly" className="data-[state=active]:bg-slate-700">
+              Hourly View
             </TabsTrigger>
-            <TabsTrigger value="daily" className="py-2 text-xs sm:text-sm data-[state=active]:bg-slate-700">
-              Daily
+            <TabsTrigger value="daily" className="data-[state=active]:bg-slate-700">
+              Daily Overview
             </TabsTrigger>
-            <TabsTrigger value="weekly" className="py-2 text-xs sm:text-sm data-[state=active]:bg-slate-700">
-              Weekly
+            <TabsTrigger value="weekly" className="data-[state=active]:bg-slate-700">
+              Weekly Analysis
             </TabsTrigger>
-            <TabsTrigger value="circuits" className="py-2 text-xs sm:text-sm data-[state=active]:bg-slate-700">
-              Circuits
+            <TabsTrigger value="circuits" className="data-[state=active]:bg-slate-700">
+              Circuit Breakdown
             </TabsTrigger>
-            <TabsTrigger value="performance" className="py-2 text-xs sm:text-sm data-[state=active]:bg-slate-700">
+            <TabsTrigger value="performance" className="data-[state=active]:bg-slate-700">
               Performance
             </TabsTrigger>
           </TabsList>
 
           {/* Hourly View */}
-          <TabsContent value="hourly" className="space-y-4 sm:space-y-6">
-            <Card className="bg-slate-800 border-slate-700 rounded-lg overflow-hidden">
-              <CardHeader className="pb-2 pt-4 px-4">
-                <CardTitle className="text-white text-sm sm:text-base">Hourly Power Flow ({selectedDate})</CardTitle>
-                <CardDescription className="text-slate-400 text-xs sm:text-sm">
-                  Solar production and load consumption by hour
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="p-4">
-                <ResponsiveContainer width="100%" height={250}>
-                  <BarChart data={hourlyData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
-                    <XAxis dataKey="time" stroke="#94a3b8" tick={{ fontSize: 10 }} />
-                    <YAxis stroke="#94a3b8" tick={{ fontSize: 10 }} />
-                    <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569' }} />
-                    <Legend wrapperStyle={{ fontSize: '12px' }} />
-                    <Bar dataKey="solar" fill="#10b981" name="Solar Production (W)" />
-                    <Bar dataKey="load" fill="#3b82f6" name="Load Consumption (W)" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
+          <TabsContent value="hourly" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card className="bg-slate-800 border-slate-700">
+                <CardHeader>
+                  <CardTitle className="text-white">Hourly Power Flow ({selectedDate})</CardTitle>
+                  <CardDescription className="text-slate-400">
+                    Solar production and load consumption by hour
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={hourlyData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
+                      <XAxis dataKey="time" stroke="#94a3b8" />
+                      <YAxis stroke="#94a3b8" />
+                      <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569' }} />
+                      <Legend />
+                      <Bar
+                        dataKey="solar"
+                        fill="#10b981"
+                        name="Solar Production (W)"
+                      />
+                      <Bar
+                        dataKey="load"
+                        fill="#3b82f6"
+                        name="Load Consumption (W)"
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
 
-            <Card className="bg-slate-800 border-slate-700 rounded-lg overflow-hidden">
-              <CardHeader className="pb-2 pt-4 px-4">
-                <CardTitle className="text-white text-sm sm:text-base">Minute-by-Minute AC Voltage & Current ({selectedDate})</CardTitle>
-                <CardDescription className="text-slate-400 text-xs sm:text-sm">
-                  AC electrical parameters by minute (Current scaled 10x for visibility)
+            <Card className="bg-slate-800 border-slate-700">
+              <CardHeader>
+                <CardTitle className="text-white">Minute-by-Minute AC Voltage & Current ({selectedDate})</CardTitle>
+                <CardDescription className="text-slate-400">
+                  AC electrical parameters by minute (Current scaled 100x for visibility)
                 </CardDescription>
               </CardHeader>
-              <CardContent className="p-4">
-                <ResponsiveContainer width="100%" height={250}>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
                   <BarChart data={minuteData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
-                    <XAxis dataKey="time" stroke="#94a3b8" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
-                    <YAxis stroke="#94a3b8" tick={{ fontSize: 10 }} />
-                    <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569' }} formatter={formatTooltipValue} />
-                    <Legend wrapperStyle={{ fontSize: '12px' }} />
-                    <Bar dataKey="acVoltage" fill="#ef4444" name="AC Voltage (V)" />
-                    <Bar dataKey="acCurrentScaled" fill="#06b6d4" name="AC Current (A × 10)" />
+                    <XAxis 
+                      dataKey="time" 
+                      stroke="#94a3b8" 
+                      interval="preserveStartEnd"
+                      tick={{ fontSize: 10 }}
+                    />
+                    <YAxis stroke="#94a3b8" />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569' }}
+                      formatter={formatTooltipValue}
+                    />
+                    <Legend />
+                    <Bar
+                      dataKey="acVoltage"
+                      fill="#ef4444"
+                      name="AC Voltage (V)"
+                    />
+                    <Bar
+                      dataKey="acCurrentScaled"
+                      fill="#06b6d4"
+                      name="AC Current (A × 100)"
+                    />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>
             </Card>
+            </div>
           </TabsContent>
 
           {/* Daily Overview */}
-          <TabsContent value="daily" className="space-y-4 sm:space-y-6">
-            <Card className="bg-slate-800 border-slate-700 rounded-lg overflow-hidden">
-              <CardHeader className="pb-2 pt-4 px-4">
-                <CardTitle className="text-white text-sm sm:text-base">Daily Power Trends</CardTitle>
-                <CardDescription className="text-slate-400 text-xs sm:text-sm">
-                  Average power flow over the last 14 days
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="p-4">
-                <ResponsiveContainer width="100%" height={250}>
-                  <BarChart data={dailyData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
-                    <XAxis dataKey="dayLabel" stroke="#94a3b8" tick={{ fontSize: 10 }} angle={-45} textAnchor="end" height={60} />
-                    <YAxis stroke="#94a3b8" tick={{ fontSize: 10 }} />
-                    <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569' }} />
-                    <Legend wrapperStyle={{ fontSize: '12px' }} />
-                    <Bar dataKey="solar" fill="#10b981" name="Avg Solar (W)" />
-                    <Bar dataKey="load" fill="#3b82f6" name="Avg Load (W)" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
+          <TabsContent value="daily" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card className="bg-slate-800 border-slate-700">
+                <CardHeader>
+                  <CardTitle className="text-white">Daily Power Trends</CardTitle>
+                  <CardDescription className="text-slate-400">
+                    Average power flow over the last 14 days
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={dailyData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
+                      <XAxis dataKey="dayLabel" stroke="#94a3b8" />
+                      <YAxis stroke="#94a3b8" />
+                      <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569' }} />
+                      <Legend />
+                      <Bar dataKey="solar" fill="#10b981" name="Avg Solar (W)" />
+                      <Bar dataKey="load" fill="#3b82f6" name="Avg Load (W)" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
 
-            <Card className="bg-slate-800 border-slate-700 rounded-lg overflow-hidden">
-              <CardHeader className="pb-2 pt-4 px-4">
-                <CardTitle className="text-white text-sm sm:text-base">Daily AC Voltage & Current Trends</CardTitle>
-                <CardDescription className="text-slate-400 text-xs sm:text-sm">
-                  Average AC electrical parameters over the last 14 days (Current scaled 100x)
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="p-4">
-                <ResponsiveContainer width="100%" height={250}>
-                  <BarChart data={dailyData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
-                    <XAxis dataKey="dayLabel" stroke="#94a3b8" tick={{ fontSize: 10 }} angle={-45} textAnchor="end" height={60} />
-                    <YAxis stroke="#94a3b8" tick={{ fontSize: 10 }} />
-                    <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569' }} />
-                    <Legend wrapperStyle={{ fontSize: '12px' }} />
-                    <Bar dataKey="acVoltage" fill="#ef4444" name="Avg AC Voltage (V)" />
-                    <Bar dataKey="acCurrentScaled" fill="#06b6d4" name="AC Current (A × 100)" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
+              <Card className="bg-slate-800 border-slate-700">
+                <CardHeader>
+                  <CardTitle className="text-white">Daily Voltage & Current Trends</CardTitle>
+                  <CardDescription className="text-slate-400">
+                    Average electrical parameters over the last 14 days
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={dailyData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
+                      <XAxis dataKey="dayLabel" stroke="#94a3b8" />
+                      <YAxis stroke="#94a3b8" />
+                      <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569' }} />
+                      <Legend />
+                      <Bar
+                        dataKey="voltage"
+                        fill="#f59e0b"
+                        name="Avg DC Voltage (V)"
+                      />
+                      <Bar
+                        dataKey="current"
+                        fill="#8b5cf6"
+                        name="Avg DC Current (A)"
+                      />
+                      <Bar
+                        dataKey="acVoltage"
+                        fill="#ef4444"
+                        name="Avg AC Voltage (V)"
+                      />
+                      <Bar
+                        dataKey="acCurrent"
+                        fill="#06b6d4"
+                        name="Avg AC Current (A)"
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
 
           {/* Weekly View */}
-          <TabsContent value="weekly" className="space-y-4 sm:space-y-6">
-            <Card className="bg-slate-800 border-slate-700 rounded-lg overflow-hidden">
-              <CardHeader className="pb-2 pt-4 px-4">
-                <CardTitle className="text-white text-sm sm:text-base">Weekly Energy Summary</CardTitle>
-                <CardDescription className="text-slate-400 text-xs sm:text-sm">
+          <TabsContent value="weekly" className="space-y-6">
+            <Card className="bg-slate-800 border-slate-700">
+              <CardHeader>
+                <CardTitle className="text-white">Weekly Energy Summary</CardTitle>
+                <CardDescription className="text-slate-400">
                   Average power and consumption over the week
                 </CardDescription>
               </CardHeader>
-              <CardContent className="p-4">
-                <ResponsiveContainer width="100%" height={300}>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={400}>
                   <BarChart data={weeklyData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
-                    <XAxis dataKey="day" stroke="#94a3b8" tick={{ fontSize: 10 }} />
-                    <YAxis stroke="#94a3b8" tick={{ fontSize: 10 }} />
+                    <XAxis dataKey="day" stroke="#94a3b8" />
+                    <YAxis stroke="#94a3b8" />
                     <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569' }} />
-                    <Legend wrapperStyle={{ fontSize: '12px' }} />
+                    <Legend />
                     <Bar dataKey="solar" fill="#10b981" name="Avg Power (kW)" />
                     <Bar dataKey="consumption" fill="#3b82f6" name="Avg Consumption (kW)" />
                   </BarChart>
@@ -496,76 +580,90 @@ const Charts = () => {
           </TabsContent>
 
           {/* Circuit Breakdown */}
-          <TabsContent value="circuits" className="space-y-4 sm:space-y-6">
-            <Card className="bg-slate-800 border-slate-700 rounded-lg overflow-hidden">
-              <CardHeader className="pb-2 pt-4 px-4">
-                <CardTitle className="text-white text-sm sm:text-base">Power Distribution</CardTitle>
-                <CardDescription className="text-slate-400 text-xs sm:text-sm">
-                  Average power consumption by circuit
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="p-4">
-                <ResponsiveContainer width="100%" height={250}>
-                  <BarChart data={circuitData} layout="horizontal">
-                    <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
-                    <XAxis type="number" stroke="#94a3b8" tick={{ fontSize: 10 }} />
-                    <YAxis dataKey="name" type="category" stroke="#94a3b8" width={60} tick={{ fontSize: 8 }} />
-                    <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569' }} />
-                    <Bar dataKey="value" fill="#10b981" name="Power (kW)" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
+          <TabsContent value="circuits" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card className="bg-slate-800 border-slate-700">
+                <CardHeader>
+                  <CardTitle className="text-white">Power Distribution</CardTitle>
+                  <CardDescription className="text-slate-400">
+                    Average power consumption by circuit
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={circuitData} layout="horizontal">
+                      <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
+                      <XAxis type="number" stroke="#94a3b8" />
+                      <YAxis dataKey="name" type="category" stroke="#94a3b8" width={80} />
+                      <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569' }} />
+                      <Bar dataKey="value" fill="#10b981" name="Power (kW)" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
 
-            <Card className="bg-slate-800 border-slate-700 rounded-lg overflow-hidden">
-              <CardHeader className="pb-2 pt-4 px-4">
-                <CardTitle className="text-white text-sm sm:text-base">Circuit Consumption Comparison</CardTitle>
-                <CardDescription className="text-slate-400 text-xs sm:text-sm">
-                  Individual circuit monitoring
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="p-4">
-                <ResponsiveContainer width="100%" height={250}>
-                  <BarChart data={circuitData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
-                    <XAxis dataKey="name" stroke="#94a3b8" tick={{ fontSize: 8 }} angle={-45} textAnchor="end" height={60} />
-                    <YAxis stroke="#94a3b8" tick={{ fontSize: 10 }} />
-                    <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569' }} />
-                    <Legend wrapperStyle={{ fontSize: '12px' }} />
-                    <Bar dataKey="consumption" fill="#3b82f6" name="Consumption (kW)" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
+              <Card className="bg-slate-800 border-slate-700">
+                <CardHeader>
+                  <CardTitle className="text-white">Circuit Consumption Comparison</CardTitle>
+                  <CardDescription className="text-slate-400">
+                    Individual circuit monitoring
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={circuitData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
+                      <XAxis dataKey="name" stroke="#94a3b8" />
+                      <YAxis stroke="#94a3b8" />
+                      <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569' }} />
+                      <Legend />
+                      <Bar dataKey="consumption" fill="#3b82f6" name="Consumption (kW)" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
 
           {/* Performance View */}
-          <TabsContent value="performance" className="space-y-4 sm:space-y-6">
-            <Card className="bg-slate-800 border-slate-700 rounded-lg overflow-hidden">
-              <CardHeader className="pb-2 pt-4 px-4">
-                <CardTitle className="text-white text-sm sm:text-base">System Performance Metrics</CardTitle>
-                <CardDescription className="text-slate-400 text-xs sm:text-sm">
+          <TabsContent value="performance" className="space-y-6">
+            <Card className="bg-slate-800 border-slate-700">
+              <CardHeader>
+                <CardTitle className="text-white">System Performance Metrics</CardTitle>
+                <CardDescription className="text-slate-400">
                   Efficiency and uptime over recent months
                 </CardDescription>
               </CardHeader>
-              <CardContent className="p-4">
-                <ResponsiveContainer width="100%" height={300}>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={400}>
                   <BarChart data={performanceData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
-                    <XAxis dataKey="month" stroke="#94a3b8" tick={{ fontSize: 10 }} />
-                    <YAxis stroke="#94a3b8" tick={{ fontSize: 10 }} />
+                    <XAxis dataKey="month" stroke="#94a3b8" />
+                    <YAxis stroke="#94a3b8" />
                     <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569' }} />
-                    <Legend wrapperStyle={{ fontSize: '12px' }} />
-                    <Bar dataKey="efficiency" fill="#10b981" name="Avg Power Efficiency (kW)" />
-                    <Bar dataKey="uptime" fill="#3b82f6" name="System Uptime (%)" />
-                    <Bar dataKey="avgEnergy" fill="#f59e0b" name="Avg Energy per Reading (kW)" />
+                    <Legend />
+                    <Bar
+                      dataKey="efficiency"
+                      fill="#10b981"
+                      name="Avg Power Efficiency (kW)"
+                    />
+                    <Bar
+                      dataKey="uptime"
+                      fill="#3b82f6"
+                      name="System Uptime (%)"
+                    />
+                    <Bar
+                      dataKey="avgEnergy"
+                      fill="#f59e0b"
+                      name="Avg Energy per Reading (kW)"
+                    />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>
             </Card>
           </TabsContent>
         </Tabs>
-      </main>
+      </div>
     </div>
   );
 };
